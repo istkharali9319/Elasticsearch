@@ -60,6 +60,7 @@ export async function searchProductsAdvanced({
   minPrice,
   maxPrice,
   minRating,
+  excludeBrand,
   sort = "relevance",
   page = 1,
   size = 12,
@@ -88,6 +89,18 @@ export async function searchProductsAdvanced({
     filter.push({ range: { rating: { gte: Number(minRating) } } });
   }
 
+  // should — optional scoring boost, not a requirement to match. In-stock
+  // products rank above otherwise-equal out-of-stock ones instead of being
+  // excluded outright, since a sold-out item is still a valid search result.
+  const should = [{ range: { stock: { gt: 0 } } }];
+
+  // must_not — excludes a brand entirely, non-scoring (same filter-context
+  // cost profile as `filter`), distinct from simply omitting it from `terms`.
+  const mustNot = [];
+  if (excludeBrand) {
+    mustNot.push({ terms: { brand: excludeBrand.split(",") } });
+  }
+
   const sortOptions = {
     relevance: undefined, // default _score sort
     price_asc: [{ price: "asc" }],
@@ -101,7 +114,7 @@ export async function searchProductsAdvanced({
     track_total_hits: true,
     from: (page - 1) * size,
     size,
-    query: { bool: { must, filter } },
+    query: { bool: { must, filter, should, must_not: mustNot } },
     sort: sortOptions[sort],
   });
 

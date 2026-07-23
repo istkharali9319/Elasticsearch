@@ -29,8 +29,18 @@ export async function getFacets(_req, res) {
 }
 
 export async function browseProducts(req, res) {
-  const { q, category, brand, minPrice, maxPrice, minRating, sort, page, size } =
-    req.query;
+  const {
+    q,
+    category,
+    brand,
+    minPrice,
+    maxPrice,
+    minRating,
+    excludeBrand,
+    sort,
+    page,
+    size,
+  } = req.query;
 
   const result = await searchProductsAdvanced({
     query: q,
@@ -39,6 +49,7 @@ export async function browseProducts(req, res) {
     minPrice,
     maxPrice,
     minRating,
+    excludeBrand,
     sort,
     page: page ? Number(page) : 1,
     size: size ? Number(size) : 12,
