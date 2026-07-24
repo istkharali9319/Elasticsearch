@@ -3,6 +3,7 @@ import {
   findProductsByExactBrand,
   getProductFacets,
   searchProductsAdvanced,
+  searchProductsInfiniteScroll,
 } from "../services/productSearchService.js";
 
 export async function searchProducts(req, res) {
@@ -52,6 +53,37 @@ export async function browseProducts(req, res) {
     excludeBrand,
     sort,
     page: page ? Number(page) : 1,
+    size: size ? Number(size) : 12,
+  });
+
+  res.json(result);
+}
+
+export async function scrollProducts(req, res) {
+  const {
+    q,
+    category,
+    brand,
+    minPrice,
+    maxPrice,
+    minRating,
+    excludeBrand,
+    sort,
+    cursor,
+    size,
+  } = req.query;
+
+  const result = await searchProductsInfiniteScroll({
+    query: q,
+    category,
+    brand,
+    minPrice,
+    maxPrice,
+    minRating,
+    excludeBrand,
+    sort,
+    // cursor arrives as a JSON-encoded array string, e.g. cursor=[2.5,"41215"]
+    cursor: cursor ? JSON.parse(cursor) : undefined,
     size: size ? Number(size) : 12,
   });
 

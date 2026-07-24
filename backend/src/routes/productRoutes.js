@@ -4,6 +4,7 @@ import {
   getProductsByBrand,
   getFacets,
   browseProducts,
+  scrollProducts,
 } from "../controllers/productController.js";
 
 const router = Router();
@@ -16,6 +17,9 @@ router.get("/facets", getFacets);
 
 // GET /api/products?q=&category=&brand=&minPrice=&maxPrice=&minRating=&sort=&page=&size=
 router.get("/", browseProducts);
+
+// GET /api/products/scroll?...&cursor=[value,"id"]  -> search_after cursor pagination
+router.get("/scroll", scrollProducts);
 
 // GET /api/products/brand/Samsung  -> term query (exact, keyword field)
 router.get("/brand/:brand", getProductsByBrand);

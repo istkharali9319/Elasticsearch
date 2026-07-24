@@ -50,10 +50,10 @@ export async function getProductFacets() {
   };
 }
 
-// Preview of Module 4 (Range) + Module 5 (Bool) + Module 6 (Sort/Pagination):
-// combines full-text relevance (must), exact filters (filter — no scoring
-// cost, cacheable), and numeric ranges (filter) into one bool query.
-export async function searchProductsAdvanced({
+// Shared across from/size pagination and search_after cursor pagination —
+// both need the identical must/filter/should/must_not bool structure from
+// Module 5, they only differ in how they page through the results.
+function buildProductBoolQuery({
   query,
   category,
   brand,
@@ -61,9 +61,6 @@ export async function searchProductsAdvanced({
   maxPrice,
   minRating,
   excludeBrand,
-  sort = "relevance",
-  page = 1,
-  size = 12,
 }) {
   const must = query
     ? [{ multi_match: { query, fields: ["title^2", "description"] } }]
@@ -101,6 +98,34 @@ export async function searchProductsAdvanced({
     mustNot.push({ terms: { brand: excludeBrand.split(",") } });
   }
 
+  return { bool: { must, filter, should, must_not: mustNot } };
+}
+
+// Preview of Module 4 (Range) + Module 5 (Bool) + Module 6 (Sort/Pagination):
+// combines full-text relevance (must), exact filters (filter — no scoring
+// cost, cacheable), and numeric ranges (filter) into one bool query.
+export async function searchProductsAdvanced({
+  query,
+  category,
+  brand,
+  minPrice,
+  maxPrice,
+  minRating,
+  excludeBrand,
+  sort = "relevance",
+  page = 1,
+  size = 12,
+}) {
+  const boolQuery = buildProductBoolQuery({
+    query,
+    category,
+    brand,
+    minPrice,
+    maxPrice,
+    minRating,
+    excludeBrand,
+  });
+
   const sortOptions = {
     relevance: undefined, // default _score sort
     price_asc: [{ price: "asc" }],
@@ -114,7 +139,7 @@ export async function searchProductsAdvanced({
     track_total_hits: true,
     from: (page - 1) * size,
     size,
-    query: { bool: { must, filter, should, must_not: mustNot } },
+    query: boolQuery,
     sort: sortOptions[sort],
   });
 
@@ -127,6 +152,67 @@ export async function searchProductsAdvanced({
       score: hit._score,
       ...hit._source,
     })),
+  };
+}
+
+// search_after — cursor-based pagination for infinite scroll. Unlike
+// from/size, this has no max_result_window ceiling and doesn't get slower
+// as you page deeper, because each request only has to find documents
+// after the cursor rather than re-sorting everything before it.
+//
+// Every sort MUST end with a unique tiebreaker field (id) — without one,
+// documents sharing the same sort value (e.g. identical price) could be
+// skipped or repeated as the cursor advances.
+const INFINITE_SCROLL_SORT_OPTIONS = {
+  relevance: [{ _score: "desc" }, { id: "asc" }],
+  price_asc: [{ price: "asc" }, { id: "asc" }],
+  price_desc: [{ price: "desc" }, { id: "asc" }],
+  rating_desc: [{ rating: "desc" }, { id: "asc" }],
+  newest: [{ createdAt: "desc" }, { id: "asc" }],
+};
+
+export async function searchProductsInfiniteScroll({
+  query,
+  category,
+  brand,
+  minPrice,
+  maxPrice,
+  minRating,
+  excludeBrand,
+  sort = "relevance",
+  cursor,
+  size = 12,
+}) {
+  const boolQuery = buildProductBoolQuery({
+    query,
+    category,
+    brand,
+    minPrice,
+    maxPrice,
+    minRating,
+    excludeBrand,
+  });
+
+  const result = await esClient.search({
+    index: PRODUCT_INDEX,
+    size,
+    query: boolQuery,
+    sort: INFINITE_SCROLL_SORT_OPTIONS[sort],
+    ...(cursor ? { search_after: cursor } : {}),
+  });
+
+  const hits = result.hits.hits;
+  const lastHit = hits[hits.length - 1];
+
+  return {
+    products: hits.map((hit) => ({
+      id: hit._id,
+      score: hit._score,
+      ...hit._source,
+    })),
+    // Opaque cursor the client passes back as `cursor` to fetch the next
+    // page; null once there are no more results.
+    nextCursor: lastHit ? lastHit.sort : null,
   };
 }
 
